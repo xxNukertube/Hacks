@@ -1,0 +1,5 @@
+{
+  "name": "Gerador de QR Code Simples",
+  "description": "Uma ferramenta fácil e rápida para criar QR Codes personalizados para links, wifi, contatos e muito mais.",
+  "requestFramePermissions": []
+}
