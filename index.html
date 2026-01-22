@@ -3,26 +3,331 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gerador de QR Code</title>
+    <title>Gerador de QR Code Simples</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Babel for in-browser compilation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
       body { font-family: 'Inter', sans-serif; }
+      /* Custom scrollbar for cleanliness */
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: #f1f5f9; }
+      ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "html-to-image": "https://esm.sh/html-to-image@^1.11.13",
-    "qrcode.react": "https://esm.sh/qrcode.react@^4.2.0"
-  }
-}
-</script>
-</head>
+  </head>
   <body class="bg-slate-50 text-slate-900 antialiased">
     <div id="root"></div>
+
+    <!-- Main Application Script -->
+    <script type="text/babel" data-type="module" data-presets="react,typescript">
+      // Import React first to ensure it's available
+      import React, { useState, useEffect, useRef } from 'https://esm.sh/react@18.2.0';
+      
+      // Use ?deps=react@18.2.0 to force all libraries to use the exact same React instance
+      import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client?deps=react@18.2.0';
+      import { QRCodeCanvas } from 'https://esm.sh/qrcode.react@3.1.0?deps=react@18.2.0';
+      import { toPng } from 'https://esm.sh/html-to-image@1.11.11';
+      import { 
+        Link as LinkIcon, Type, Mail, Phone, MessageSquare, 
+        Contact, Wifi, Calendar, FileText, Smartphone, Image as ImageIcon, 
+        Video, Share2, QrCode, Download, Loader2 
+      } from 'https://esm.sh/lucide-react@0.292.0?deps=react@18.2.0';
+
+      // --- TYPES & ENUMS ---
+      const QRType = {
+        LINK: 'link', 
+        TEXT: 'text', 
+        EMAIL: 'email', 
+        PHONE: 'phone',
+        SMS: 'sms', 
+        VCARD: 'vcard', 
+        WHATSAPP: 'whatsapp', 
+        WIFI: 'wifi',
+        EVENT: 'event', 
+        PDF: 'pdf', 
+        APP: 'app', 
+        IMAGE: 'image',
+        VIDEO: 'video', 
+        SOCIAL: 'social'
+      };
+
+      // --- HELPERS ---
+      const generateQRString = (type, details) => {
+        switch (type) {
+          case QRType.LINK:
+          case QRType.PDF:
+          case QRType.APP:
+          case QRType.IMAGE:
+          case QRType.VIDEO:
+          case QRType.SOCIAL:
+            return details.url || '';
+          case QRType.TEXT:
+            return details.text || '';
+          case QRType.EMAIL:
+            return `mailto:${details.email || ''}?subject=${encodeURIComponent(details.subject || '')}&body=${encodeURIComponent(details.body || '')}`;
+          case QRType.PHONE:
+            return `tel:${details.phone || ''}`;
+          case QRType.SMS:
+            return `SMSTO:${details.phone || ''}:${details.text || ''}`;
+          case QRType.WHATSAPP:
+            const cleanPhone = (details.phone || '').replace(/\D/g, '');
+            return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(details.text || '')}`;
+          case QRType.WIFI:
+            return `WIFI:T:${details.encryption || 'WPA'};S:${details.ssid || ''};P:${details.password || ''};;`;
+          case QRType.VCARD:
+            return `BEGIN:VCARD\nVERSION:3.0\nN:${details.lastName || ''};${details.firstName || ''}\nFN:${details.firstName || ''} ${details.lastName || ''}\nORG:${details.organization || ''}\nTEL:${details.phone || ''}\nEMAIL:${details.email || ''}\nEND:VCARD`;
+          case QRType.EVENT:
+            return `BEGIN:VEVENT\nSUMMARY:${details.eventTitle || ''}\nLOCATION:${details.eventLocation || ''}\nDTSTART:${(details.eventStart || '').replace(/[-:]/g, '')}\nDTEND:${(details.eventEnd || '').replace(/[-:]/g, '')}\nEND:VEVENT`;
+          default:
+            return '';
+        }
+      };
+
+      // --- COMPONENTS ---
+
+      // 1. InputForm Component
+      const InputForm = ({ type, data, onChange }) => {
+        const handleChange = (e) => {
+          const { name, value } = e.target;
+          onChange({ ...data, [name]: value });
+        };
+
+        const inputClass = "w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all";
+        const labelClass = "block text-sm font-medium text-slate-700 mb-1";
+
+        if ([QRType.LINK, QRType.PDF, QRType.APP, QRType.IMAGE, QRType.VIDEO, QRType.SOCIAL].includes(type)) {
+          let placeholder = "https://www.exemplo.com";
+          let label = "URL do Site";
+          if (type === QRType.PDF) { label = "Link do Arquivo PDF"; placeholder = "https://..."; }
+          if (type === QRType.APP) { label = "Link da App Store / Play Store"; placeholder = "https://..."; }
+          if (type === QRType.IMAGE) { label = "Link da Imagem"; placeholder = "https://..."; }
+          if (type === QRType.VIDEO) { label = "Link do Vídeo"; placeholder = "https://..."; }
+          if (type === QRType.SOCIAL) { label = "Link da Rede Social"; placeholder = "https://instagram.com/seu_perfil"; }
+
+          return (
+            <div>
+              <label className={labelClass}>{label}</label>
+              <input type="url" name="url" value={data.url || ''} onChange={handleChange} placeholder={placeholder} className={inputClass} />
+              {[QRType.PDF, QRType.IMAGE, QRType.VIDEO].includes(type) && (
+                <p className="text-xs text-slate-500 mt-2">* Nota: O QR Code armazena o link onde seu arquivo está hospedado.</p>
+              )}
+            </div>
+          );
+        }
+
+        switch (type) {
+          case QRType.TEXT:
+            return (
+              <div>
+                <label className={labelClass}>Texto</label>
+                <textarea name="text" value={data.text || ''} onChange={handleChange} placeholder="Digite seu texto..." rows={4} className={inputClass} />
+              </div>
+            );
+          case QRType.EMAIL:
+            return (
+              <div className="space-y-4">
+                <div><label className={labelClass}>E-mail de Destino</label><input type="email" name="email" value={data.email || ''} onChange={handleChange} className={inputClass} /></div>
+                <div><label className={labelClass}>Assunto</label><input type="text" name="subject" value={data.subject || ''} onChange={handleChange} className={inputClass} /></div>
+                <div><label className={labelClass}>Mensagem</label><textarea name="body" value={data.body || ''} onChange={handleChange} rows={3} className={inputClass} /></div>
+              </div>
+            );
+          case QRType.PHONE:
+            return <div><label className={labelClass}>Número de Telefone</label><input type="tel" name="phone" value={data.phone || ''} onChange={handleChange} className={inputClass} /></div>;
+          case QRType.SMS:
+            return (
+              <div className="space-y-4">
+                <div><label className={labelClass}>Número de Telefone</label><input type="tel" name="phone" value={data.phone || ''} onChange={handleChange} className={inputClass} /></div>
+                <div><label className={labelClass}>Mensagem SMS</label><textarea name="text" value={data.text || ''} onChange={handleChange} className={inputClass} /></div>
+              </div>
+            );
+          case QRType.WHATSAPP:
+            return (
+              <div className="space-y-4">
+                <div><label className={labelClass}>Número de WhatsApp</label><input type="tel" name="phone" value={data.phone || ''} onChange={handleChange} className={inputClass} /></div>
+                <div><label className={labelClass}>Mensagem Inicial</label><textarea name="text" value={data.text || ''} onChange={handleChange} className={inputClass} /></div>
+              </div>
+            );
+          case QRType.WIFI:
+            return (
+              <div className="space-y-4">
+                <div><label className={labelClass}>Nome da Rede (SSID)</label><input type="text" name="ssid" value={data.ssid || ''} onChange={handleChange} className={inputClass} /></div>
+                <div><label className={labelClass}>Senha</label><input type="text" name="password" value={data.password || ''} onChange={handleChange} className={inputClass} /></div>
+                <div>
+                  <label className={labelClass}>Tipo de Segurança</label>
+                  <select name="encryption" value={data.encryption || 'WPA'} onChange={handleChange} className={inputClass}>
+                    <option value="WPA">WPA/WPA2</option>
+                    <option value="WEP">WEP</option>
+                    <option value="nopass">Sem Senha</option>
+                  </select>
+                </div>
+              </div>
+            );
+          case QRType.VCARD:
+            return (
+               <div className="space-y-4">
+                 <div className="grid grid-cols-2 gap-4">
+                   <div><label className={labelClass}>Nome</label><input type="text" name="firstName" value={data.firstName || ''} onChange={handleChange} className={inputClass} /></div>
+                   <div><label className={labelClass}>Sobrenome</label><input type="text" name="lastName" value={data.lastName || ''} onChange={handleChange} className={inputClass} /></div>
+                 </div>
+                 <div><label className={labelClass}>Telefone</label><input type="tel" name="phone" value={data.phone || ''} onChange={handleChange} className={inputClass} /></div>
+                 <div><label className={labelClass}>E-mail</label><input type="email" name="email" value={data.email || ''} onChange={handleChange} className={inputClass} /></div>
+                 <div><label className={labelClass}>Empresa</label><input type="text" name="organization" value={data.organization || ''} onChange={handleChange} className={inputClass} /></div>
+               </div>
+            );
+          case QRType.EVENT:
+            return (
+              <div className="space-y-4">
+                <div><label className={labelClass}>Título</label><input type="text" name="eventTitle" value={data.eventTitle || ''} onChange={handleChange} className={inputClass} /></div>
+                <div><label className={labelClass}>Local</label><input type="text" name="eventLocation" value={data.eventLocation || ''} onChange={handleChange} className={inputClass} /></div>
+                <div className="grid grid-cols-2 gap-4">
+                   <div><label className={labelClass}>Início (YYYYMMDDTHHmmSS)</label><input type="text" name="eventStart" value={data.eventStart || ''} onChange={handleChange} className={inputClass} /></div>
+                   <div><label className={labelClass}>Fim</label><input type="text" name="eventEnd" value={data.eventEnd || ''} onChange={handleChange} className={inputClass} /></div>
+                </div>
+              </div>
+            );
+          default:
+            return <div className="text-slate-500">Selecione um tipo para começar.</div>;
+        }
+      };
+
+      // 2. QRPreview Component
+      const QRPreview = ({ value, frameConfig, onFrameChange }) => {
+        const ref = useRef(null);
+        const [downloading, setDownloading] = useState(false);
+
+        const handleDownload = async () => {
+          if (!ref.current) return;
+          setDownloading(true);
+          try {
+            await toPng(ref.current, { cacheBust: true, pixelRatio: 3 });
+            const dataUrl = await toPng(ref.current, { cacheBust: true, pixelRatio: 3 });
+            const link = document.createElement('a');
+            link.download = 'qrcode.png';
+            link.href = dataUrl;
+            link.click();
+          } catch (err) {
+            console.error(err);
+            alert('Erro ao gerar imagem.');
+          } finally {
+            setDownloading(false);
+          }
+        };
+
+        return (
+          <div className="flex flex-col items-center gap-6 w-full">
+            <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+              <div ref={ref} className="p-8 flex flex-col items-center justify-center" style={{ backgroundColor: frameConfig.enabled ? frameConfig.bgColor : 'white' }}>
+                <div className="bg-white p-2 rounded-lg">
+                   <QRCodeCanvas value={value || 'https://example.com'} size={200} fgColor={frameConfig.color} bgColor="#ffffff" level="H" />
+                </div>
+                {frameConfig.enabled && (
+                   <div className="mt-4 font-bold text-xl uppercase tracking-wider text-center max-w-[200px]" 
+                        style={{ color: frameConfig.color === '#000000' && frameConfig.bgColor === '#000000' ? 'white' : (frameConfig.bgColor === '#ffffff' ? frameConfig.color : 'white') }}>
+                      {frameConfig.text}
+                   </div>
+                )}
+              </div>
+            </div>
+
+            <div className="w-full space-y-4">
+               <div className="grid grid-cols-3 gap-2">
+                  <button onClick={() => onFrameChange({...frameConfig, enabled: false, style: 'simple'})} className={`p-2 text-sm rounded-lg border ${!frameConfig.enabled ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-white'}`}>Sem Moldura</button>
+                  <button onClick={() => onFrameChange({...frameConfig, enabled: true, style: 'scanme', text: 'SCAN ME'})} className={`p-2 text-sm rounded-lg border ${frameConfig.style === 'scanme' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-white'}`}>Scan Me</button>
+                  <button onClick={() => onFrameChange({...frameConfig, enabled: true, style: 'custom'})} className={`p-2 text-sm rounded-lg border ${frameConfig.style === 'custom' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-white'}`}>Personalizado</button>
+               </div>
+               
+               {frameConfig.style === 'custom' && (
+                  <div><label className="text-xs text-slate-500">Texto</label><input type="text" value={frameConfig.text} onChange={(e) => onFrameChange({...frameConfig, text: e.target.value})} maxLength={20} className="w-full p-2 border rounded-md text-sm" /></div>
+               )}
+
+               <div className="grid grid-cols-2 gap-4">
+                  <div><label className="text-xs text-slate-500 block">Cor do QR</label><input type="color" value={frameConfig.color} onChange={(e) => onFrameChange({...frameConfig, color: e.target.value})} className="h-8 w-12 cursor-pointer border rounded" /></div>
+                  {frameConfig.enabled && <div><label className="text-xs text-slate-500 block">Cor da Moldura</label><input type="color" value={frameConfig.bgColor} onChange={(e) => onFrameChange({...frameConfig, bgColor: e.target.value})} className="h-8 w-12 cursor-pointer border rounded" /></div>}
+               </div>
+
+               <button onClick={handleDownload} disabled={!value || downloading} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                  {downloading ? <Loader2 className="animate-spin w-5 h-5" /> : <Download className="w-5 h-5" />}
+                  Baixar PNG
+               </button>
+            </div>
+          </div>
+        );
+      };
+
+      // 3. Main App Component
+      const App = () => {
+        const [selectedType, setSelectedType] = useState(QRType.LINK);
+        const [details, setDetails] = useState({});
+        const [qrValue, setQrValue] = useState('');
+        const [frameConfig, setFrameConfig] = useState({ enabled: true, text: 'SCAN ME', style: 'scanme', color: '#000000', bgColor: '#000000' });
+
+        useEffect(() => {
+          setQrValue(generateQRString(selectedType, details));
+        }, [selectedType, details]);
+
+        const handleTypeChange = (type) => { setSelectedType(type); setDetails({}); };
+
+        const navItems = [
+          { type: QRType.LINK, label: 'Link', icon: LinkIcon },
+          { type: QRType.TEXT, label: 'Texto', icon: Type },
+          { type: QRType.EMAIL, label: 'E-mail', icon: Mail },
+          { type: QRType.PHONE, label: 'Chamada', icon: Phone },
+          { type: QRType.SMS, label: 'SMS', icon: MessageSquare },
+          { type: QRType.WHATSAPP, label: 'WhatsApp', icon: MessageSquare },
+          { type: QRType.WIFI, label: 'WI-FI', icon: Wifi },
+          { type: QRType.VCARD, label: 'V-Card', icon: Contact },
+          { type: QRType.EVENT, label: 'Evento', icon: Calendar },
+          { type: QRType.PDF, label: 'PDF', icon: FileText },
+          { type: QRType.APP, label: 'App', icon: Smartphone },
+          { type: QRType.IMAGE, label: 'Imagens', icon: ImageIcon },
+          { type: QRType.VIDEO, label: 'Vídeo', icon: Video },
+          { type: QRType.SOCIAL, label: 'Social', icon: Share2 },
+        ];
+
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-slate-100 to-indigo-50 p-4 md:p-8">
+            <div className="max-w-6xl mx-auto">
+              <header className="mb-8 text-center md:text-left flex items-center gap-3 justify-center md:justify-start">
+                <div className="bg-indigo-600 p-2 rounded-lg text-white"><QrCode size={32} /></div>
+                <div><h1 className="text-2xl font-bold text-slate-800">Gerador de QR Code</h1><p className="text-slate-500 text-sm">Crie, personalize e baixe seus códigos gratuitamente.</p></div>
+              </header>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-slate-200 p-4 h-fit max-h-[600px] overflow-y-auto">
+                  <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4 px-2">Menu</h2>
+                  <nav className="grid grid-cols-2 lg:grid-cols-1 gap-2">
+                    {navItems.map((item) => (
+                      <button key={item.type} onClick={() => handleTypeChange(item.type)} 
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${selectedType === item.type ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'}`}>
+                        <item.icon size={18} /> {item.label}
+                      </button>
+                    ))}
+                  </nav>
+                </div>
+
+                <div className="lg:col-span-9 grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 h-fit">
+                    <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2"><span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold">1</span> Conteúdo</h2>
+                    <InputForm type={selectedType} data={details} onChange={setDetails} />
+                  </div>
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 h-fit lg:sticky lg:top-8">
+                     <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2"><span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold">2</span> Personalização</h2>
+                    <QRPreview value={qrValue} frameConfig={frameConfig} onFrameChange={setFrameConfig} />
+                  </div>
+                </div>
+              </div>
+              
+              <footer className="mt-12 text-center text-slate-400 text-sm">&copy; {new Date().getFullYear()} Gerador Simples.</footer>
+            </div>
+          </div>
+        );
+      };
+
+      const root = createRoot(document.getElementById('root'));
+      root.render(<App />);
+    </script>
   </body>
 </html>
